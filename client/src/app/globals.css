@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pistachio: #93C572;
+  --color-pistachio-light: #B2D3C2;
+  --color-pistachio-dark: #74A57F;
+
+  --color-coffee: #4B3621;
+  --color-coffee-light: #6F4E37;
+  --color-coffee-latte: #DCC1AB;
+
+  --color-cream: #FDFBF7;
+
+  --font-serif: var(--font-playfair), serif;
+  --font-sans: var(--font-inter), sans-serif;
+
+  --border-width-3: 3px;
+}
+
+/* Base Variables */
+:root {
+  --background: #FDFBF7;
+  --foreground: #4B3621;
+}
+
+/* Base Element Styles */
+@layer base {
+  body {
+    color: var(--foreground);
+    background: var(--background);
+    font-family: var(--font-inter), sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-playfair), serif;
+    font-weight: 700;
+  }
+}
+
+/* Component Classes */
+@layer components {
+  .btn-primary {
+    @apply bg-coffee text-cream px-6 py-3 font-bold border-3 border-coffee transition-all hover:bg-transparent hover:text-coffee;
+  }
+
+  .btn-secondary {
+    @apply bg-transparent text-coffee px-6 py-3 font-bold border-3 border-coffee transition-all hover:bg-pistachio hover:text-white hover:border-pistachio;
+  }
+
+  .card {
+    @apply bg-white border-3 border-coffee p-6 shadow-[4px_4px_0px_0px_var(--color-coffee)];
+  }
+}

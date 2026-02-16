@@ -1,58 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fetchMarkets, type MarketContract } from "@/lib/api";
 
 export default function MarketsPage() {
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [markets, setMarkets] = useState<MarketContract[]>([]);
 
     useEffect(() => {
-        console.log("MOCK DATA: Markets page loaded with fake contracts.");
-        setTimeout(() => setIsLoading(false), 800);
+        fetchMarkets()
+            .then((data) => {
+                setMarkets(data.markets);
+            })
+            .catch((err) => {
+                console.error("Failed to load markets:", err);
+                setError("Could not connect to the market engine.");
+            })
+            .finally(() => setIsLoading(false));
     }, []);
-
-    const markets = [
-        {
-            id: "kalshi-1",
-            provider: "Kalshi",
-            title: "Will Coffee (KC) close above $2.50 in Dec?",
-            volume: "$142K",
-            yesPrice: "42¢",
-            noPrice: "58¢",
-            expiry: "Dec 12, 2026"
-        },
-        {
-            id: "poly-1",
-            provider: "PolyMarket",
-            title: "US Recession in 2026?",
-            volume: "$2.1M",
-            yesPrice: "18¢",
-            noPrice: "82¢",
-            expiry: "Dec 31, 2026"
-        },
-        {
-            id: "kalshi-2",
-            provider: "Kalshi",
-            title: "Fed Interest Rate Cut in March",
-            volume: "$890K",
-            yesPrice: "65¢",
-            noPrice: "35¢",
-            expiry: "Mar 18, 2026"
-        },
-        {
-            id: "poly-2",
-            provider: "PolyMarket",
-            title: "Bitcoin > $150k by Q3",
-            volume: "$5.4M",
-            yesPrice: "31¢",
-            noPrice: "69¢",
-            expiry: "Sep 30, 2026"
-        },
-    ];
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh] text-coffee animate-pulse">
                 <div className="text-2xl font-serif">Loading Market Data...</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="p-6 bg-red-50 text-red-800 border-3 border-red-200 font-bold text-lg">{error}</div>
             </div>
         );
     }

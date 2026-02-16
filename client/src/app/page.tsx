@@ -46,7 +46,7 @@ export default function Home() {
     <div className="flex flex-col items-center justify-start min-h-full py-16 px-4 sm:px-20">
       <div className="text-center mb-16 max-w-4xl">
         <h1 className="text-6xl sm:text-7xl font-serif font-black text-coffee mb-6 leading-tight">
-          Paper <span className="text-pistachio underline decoration-4 underline-offset-8 decoration-coffee">Everything</span>.
+          Hedge <span className="text-pistachio underline decoration-4 underline-offset-8 decoration-coffee">Everything</span>.
         </h1>
         <p className="text-xl sm:text-2xl text-coffee-light font-medium max-w-2xl mx-auto leading-relaxed">
           Turn your business operations into a hedged portfolio using real-world prediction markets.

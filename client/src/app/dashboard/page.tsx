@@ -1,31 +1,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fetchDashboard, type KPI, type ActiveRisk } from "@/lib/api";
 
 export default function DashboardPage() {
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [kpis, setKpis] = useState<KPI[]>([]);
+    const [activeRisks, setActiveRisks] = useState<ActiveRisk[]>([]);
 
     useEffect(() => {
-        console.log("MOCK DATA: Dashboard loaded with fake risk profiles.");
-        setTimeout(() => setIsLoading(false), 800);
+        fetchDashboard()
+            .then((data) => {
+                setKpis(data.kpis);
+                setActiveRisks(data.activeRisks);
+            })
+            .catch((err) => {
+                console.error("Failed to load dashboard:", err);
+                setError("Could not connect to the risk engine.");
+            })
+            .finally(() => setIsLoading(false));
     }, []);
-
-    const kpis = [
-        { label: "Active Risks", value: "7", change: "+2", safe: false },
-        { label: "Hedged Value", value: "$42,500", change: "+12%", safe: true },
-        { label: "Portfolio ROI", value: "+8.4%", change: "vs Last Month", safe: true },
-    ];
-
-    const activeRisks = [
-        { id: 1, name: "Coffee Futures (KC)", probability: "78%", impact: "High", hedgeStatus: "Partially Hedged" },
-        { id: 2, name: "Port Strike (East Coast)", probability: "45%", impact: "Severe", hedgeStatus: "Unhedged" },
-        { id: 3, name: "Inflation Rate > 3.5%", probability: "30%", impact: "Moderate", hedgeStatus: "Fully Hedged" },
-    ];
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh] text-coffee animate-pulse">
                 <div className="text-2xl font-serif">Loading Risk Profile...</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="p-6 bg-red-50 text-red-800 border-3 border-red-200 font-bold text-lg">{error}</div>
             </div>
         );
     }
@@ -36,9 +44,6 @@ export default function DashboardPage() {
                 <div>
                     <h1 className="text-5xl font-serif text-coffee mb-2">Risk Dashboard</h1>
                     <p className="text-coffee-light font-medium text-lg">Overview of your operational exposure.</p>
-                </div>
-                <div className="bg-pistachio/20 text-pistachio-dark font-bold px-4 py-2 rounded-lg border-2 border-pistachio-dark/20">
-                    MOCK DATA MODE
                 </div>
             </header>
 
@@ -78,8 +83,8 @@ export default function DashboardPage() {
                                     </td>
                                     <td className="py-6">
                                         <span className={`px-3 py-1 text-xs border-2 font-bold uppercase ${risk.impact === 'Severe' ? 'bg-red-50 text-red-800 border-red-200' :
-                                                risk.impact === 'High' ? 'bg-orange-50 text-orange-800 border-orange-200' :
-                                                    'bg-blue-50 text-blue-800 border-blue-200'
+                                            risk.impact === 'High' ? 'bg-orange-50 text-orange-800 border-orange-200' :
+                                                'bg-blue-50 text-blue-800 border-blue-200'
                                             }`}>
                                             {risk.impact}
                                         </span>

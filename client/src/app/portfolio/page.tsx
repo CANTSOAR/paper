@@ -1,55 +1,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fetchPortfolio, type Position, type PortfolioSummary } from "@/lib/api";
 
 export default function PortfolioPage() {
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [summary, setSummary] = useState<PortfolioSummary | null>(null);
+    const [positions, setPositions] = useState<Position[]>([]);
 
     useEffect(() => {
-        console.log("MOCK DATA: Portfolio loaded with fake positions.");
-        setTimeout(() => setIsLoading(false), 800);
+        fetchPortfolio()
+            .then((data) => {
+                setSummary(data.summary);
+                setPositions(data.positions);
+            })
+            .catch((err) => {
+                console.error("Failed to load portfolio:", err);
+                setError("Could not connect to the portfolio engine.");
+            })
+            .finally(() => setIsLoading(false));
     }, []);
-
-    const positions = [
-        {
-            id: 1,
-            market: "Coffee Bean Shortage Q3",
-            side: "YES",
-            shares: 1500,
-            avgPrice: "$0.42",
-            currentPrice: "$0.55",
-            pnl: "+$195.00",
-            pnlPercent: "+31%",
-            isPositive: true
-        },
-        {
-            id: 2,
-            market: "US Inflation < 3.0%",
-            side: "NO",
-            shares: 500,
-            avgPrice: "$0.30",
-            currentPrice: "$0.28",
-            pnl: "-$10.00",
-            pnlPercent: "-6.6%",
-            isPositive: false
-        },
-        {
-            id: 3,
-            market: "Panama Canal Restrictions",
-            side: "YES",
-            shares: 2000,
-            avgPrice: "$0.60",
-            currentPrice: "$0.65",
-            pnl: "+$100.00",
-            pnlPercent: "+8.3%",
-            isPositive: true
-        },
-    ];
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh] text-coffee animate-pulse">
                 <div className="text-2xl font-serif">Loading Portfolio...</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="p-6 bg-red-50 text-red-800 border-3 border-red-200 font-bold text-lg">{error}</div>
             </div>
         );
     }
@@ -61,11 +45,13 @@ export default function PortfolioPage() {
                     <h1 className="text-5xl font-serif text-coffee mb-2">My Portfolio</h1>
                     <p className="text-coffee-light font-medium text-lg">Active hedges and performance tracking.</p>
                 </div>
-                <div className="flex flex-col items-end">
-                    <span className="text-sm font-bold text-coffee-light uppercase tracking-widest">Total Value</span>
-                    <span className="text-4xl font-serif text-coffee font-bold">$42,500</span>
-                    <span className="text-pistachio-dark font-bold text-sm">+8.4% All Time</span>
-                </div>
+                {summary && (
+                    <div className="flex flex-col items-end">
+                        <span className="text-sm font-bold text-coffee-light uppercase tracking-widest">Total Value</span>
+                        <span className="text-4xl font-serif text-coffee font-bold">{summary.totalValue}</span>
+                        <span className="text-pistachio-dark font-bold text-sm">{summary.allTimeReturn}</span>
+                    </div>
+                )}
             </header>
 
             <div className="flex gap-8 items-start">
@@ -109,7 +95,7 @@ export default function PortfolioPage() {
                     <div className="bg-coffee text-cream p-6 border-3 border-coffee shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
                         <h3 className="text-xl font-serif font-bold mb-2">Rebalance Alert</h3>
                         <p className="text-coffee-latte text-sm mb-4 leading-relaxed">
-                            Your "Coffee Futures" hedge is 15% underweight due to recent drift.
+                            Your &quot;Coffee Futures&quot; hedge is 15% underweight due to recent drift.
                         </p>
                         <button className="w-full bg-pistachio text-coffee font-bold py-3 uppercase tracking-widest hover:bg-white transition-colors">
                             Rebalance Now

@@ -9,6 +9,7 @@ import google.genai as genai
 
 from .markets.kalshi import KalshiAdapter
 from .markets.polymarket import PolyMarketAdapter
+from .agent import RiskAgent
 
 load_dotenv()
 
@@ -18,9 +19,11 @@ app = FastAPI(title="Prediction Market Hedging API")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY and GEMINI_API_KEY != "your-api-key-here":
     gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    risk_agent = RiskAgent(api_key=GEMINI_API_KEY)
 else:
     gemini_client = None
-    print("⚠️  GEMINI_API_KEY not set — /analyze will return mock data.")
+    risk_agent = None
+    print("⚠️  GEMINI_API_KEY not set — /analyze and /chat will return mock data.")
 
 # Allow CORS for frontend
 app.add_middleware(
@@ -98,6 +101,23 @@ class PortfolioResponse(BaseModel):
     summary: PortfolioSummary
     positions: List[Position]
 
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant" | "tool"
+    content: str
+    tool: Optional[str] = None
+    args: Optional[dict] = None
+    result_count: Optional[int] = None
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage] = []
+    message: str
+    session_id: str = "default"
+
+class ChatResponse(BaseModel):
+    messages: List[ChatMessage]
+    markets: List[MarketContract] = []
+    tool_calls: List[dict] = []
+
 # ── Health ────────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -107,6 +127,59 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+# ── Chat (Agentic conversation) ──────────────────────────────────────
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    if risk_agent is None:
+        return ChatResponse(
+            messages=[
+                ChatMessage(role="user", content=req.message),
+                ChatMessage(
+                    role="assistant",
+                    content="I'm sorry, the AI engine isn't configured yet. Please set a GEMINI_API_KEY in the server .env file.",
+                ),
+            ],
+            markets=[],
+            tool_calls=[],
+        )
+
+    try:
+        history = [msg.model_dump() for msg in req.messages]
+        result = risk_agent.chat(history, req.message, session_id=req.session_id)
+
+        # Convert dicts back to Pydantic models
+        messages_out = [ChatMessage(**m) for m in result["messages"]]
+        markets_out = [MarketContract(**m) for m in result.get("markets", [])]
+
+        return ChatResponse(
+            messages=messages_out,
+            markets=markets_out,
+            tool_calls=result.get("tool_calls", []),
+        )
+    except Exception as e:
+        print(f"Chat error: {e}")
+        import traceback
+        traceback.print_exc()
+        history_msgs = [ChatMessage(**msg.model_dump()) for msg in req.messages]
+        return ChatResponse(
+            messages=history_msgs + [
+                ChatMessage(role="user", content=req.message),
+                ChatMessage(
+                    role="assistant",
+                    content=f"I encountered an error while processing your request. Please try again. ({type(e).__name__})",
+                ),
+            ],
+            markets=[],
+            tool_calls=[],
+        )
+
+@app.delete("/chat/{session_id}")
+def drop_chat_session(session_id: str):
+    if risk_agent:
+        risk_agent.drop_session(session_id)
+    return {"status": "ok"}
 
 # ── Analyze (Gemini-powered) ─────────────────────────────────────────
 
@@ -187,12 +260,21 @@ def get_dashboard():
 # ── Markets ───────────────────────────────────────────────────────────
 
 @app.get("/markets", response_model=MarketsResponse)
-def get_markets():
-    kalshi_markets = kalshi.search_markets("")
-    poly_markets = polymarket.search_markets("")
-    
-    all_markets = [MarketContract(**m) for m in kalshi_markets + poly_markets]
+def get_markets(query: str = "", provider: str = "all"):
+    all_raw: list = []
+    p = provider.lower()
+
+    if p in ("all", "kalshi"):
+        all_raw.extend(kalshi.search_markets(query))
+    if p in ("all", "polymarket"):
+        all_raw.extend(polymarket.search_markets(query))
+
+    all_markets = [MarketContract(**m) for m in all_raw]
     return MarketsResponse(markets=all_markets)
+
+@app.get("/kalshi/categories")
+def get_kalshi_categories():
+    return {"categories": kalshi.get_categories()}
 
 # ── Portfolio ─────────────────────────────────────────────────────────
 

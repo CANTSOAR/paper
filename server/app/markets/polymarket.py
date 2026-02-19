@@ -5,6 +5,10 @@ from .adapter import MarketAdapter
 
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 
+TARGET_RESULTS = 20
+PAGE_SIZE = 1000
+MAX_PAGES = 10
+
 
 class PolyMarketAdapter(MarketAdapter):
 
@@ -33,7 +37,6 @@ class PolyMarketAdapter(MarketAdapter):
     # ── Helpers ───────────────────────────────────────────────────────
     @staticmethod
     def _fmt_price(decimal_str: str) -> str:
-        """Convert '0.42' decimal string to '42¢'."""
         try:
             val = float(decimal_str)
             cents = round(val * 100)
@@ -45,7 +48,6 @@ class PolyMarketAdapter(MarketAdapter):
 
     @staticmethod
     def _fmt_volume(vol: float) -> str:
-        """Convert raw volume float to human-readable string."""
         if vol >= 1_000_000:
             return f"${vol / 1_000_000:.1f}M"
         if vol >= 1_000:
@@ -54,7 +56,6 @@ class PolyMarketAdapter(MarketAdapter):
 
     @staticmethod
     def _fmt_expiry(iso: str) -> str:
-        """Convert ISO-8601 timestamp to 'Mar 18, 2026' format."""
         from datetime import datetime
         try:
             dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
@@ -62,48 +63,100 @@ class PolyMarketAdapter(MarketAdapter):
         except Exception:
             return iso
 
-    # ── Public API ────────────────────────────────────────────────────
-    def search_markets(self, query: str) -> List[Dict[str, Any]]:
+    def _transform(self, m: dict) -> dict:
+        prices_raw = m.get("outcomePrices", "[]")
         try:
+            prices = json.loads(prices_raw) if isinstance(prices_raw, str) else prices_raw
+        except json.JSONDecodeError:
+            prices = []
+
+        yes_price = prices[0] if len(prices) > 0 else "0"
+        no_price = prices[1] if len(prices) > 1 else "0"
+
+        return {
+            "id": m.get("id", ""),
+            "provider": "PolyMarket",
+            "title": m.get("question", ""),
+            "volume": self._fmt_volume(m.get("volumeNum", 0) or 0),
+            "yesPrice": self._fmt_price(yes_price),
+            "noPrice": self._fmt_price(no_price),
+            "expiry": self._fmt_expiry(m.get("endDate", "")),
+        }
+
+    # ── Search via /public-search (fast, server-side full-text) ───────
+    def _search_public(self, query: str) -> List[Dict[str, Any]]:
+        """Use Polymarket's dedicated full-text search endpoint."""
+        resp = httpx.get(
+            f"{GAMMA_BASE}/public-search",
+            params={"q": query},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        results: list = []
+        for event in data.get("events", []):
+            for m in event.get("markets", []):
+                question = m.get("question", "")
+                if not question:
+                    continue
+                # Skip closed markets
+                if m.get("closed"):
+                    continue
+                results.append(self._transform(m))
+                if len(results) >= TARGET_RESULTS:
+                    return results
+
+        return results
+
+    # ── Browse via /markets (paginated, for default view) ─────────────
+    def _browse_markets(self) -> List[Dict[str, Any]]:
+        """Paginate through /markets for the default (no-query) view."""
+        results: list = []
+        offset = 0
+
+        for _ in range(MAX_PAGES):
+            params: dict = {
+                "closed": "false",
+                "active": "true",
+                "limit": PAGE_SIZE,
+                "offset": offset,
+            }
             resp = httpx.get(
                 f"{GAMMA_BASE}/markets",
-                params={"closed": "false", "limit": 10, "active": "true"},
+                params=params,
                 timeout=10,
             )
             resp.raise_for_status()
             raw_markets = resp.json()
 
-            results = []
             for m in raw_markets:
                 question = m.get("question", "")
                 if not question:
                     continue
+                results.append(self._transform(m))
+                if len(results) >= TARGET_RESULTS:
+                    return results
 
-                # Parse outcome prices (JSON-encoded list: '["0.42", "0.58"]')
-                prices_raw = m.get("outcomePrices", "[]")
-                try:
-                    prices = json.loads(prices_raw) if isinstance(prices_raw, str) else prices_raw
-                except json.JSONDecodeError:
-                    prices = []
+            if len(raw_markets) < PAGE_SIZE:
+                break
+            offset += PAGE_SIZE
 
-                yes_price = prices[0] if len(prices) > 0 else "0"
-                no_price = prices[1] if len(prices) > 1 else "0"
+        return results
 
-                results.append({
-                    "id": m.get("id", ""),
-                    "provider": "PolyMarket",
-                    "title": question,
-                    "volume": self._fmt_volume(m.get("volumeNum", 0) or 0),
-                    "yesPrice": self._fmt_price(yes_price),
-                    "noPrice": self._fmt_price(no_price),
-                    "expiry": self._fmt_expiry(m.get("endDate", "")),
-                })
+    # ── Public API ────────────────────────────────────────────────────
+    def search_markets(self, query: str) -> List[Dict[str, Any]]:
+        try:
+            if query:
+                results = self._search_public(query)
+            else:
+                results = self._browse_markets()
 
-            return results if results else self.MOCK_MARKETS
+            return results if results else (self.MOCK_MARKETS if not query else [])
 
         except Exception as e:
             print(f"⚠️  PolyMarket API error: {e}")
-            return self.MOCK_MARKETS
+            return self.MOCK_MARKETS if not query else []
 
     def get_market_details(self, market_id: str) -> Dict[str, Any]:
         try:
